@@ -72,7 +72,7 @@ public class BlockMoveArrow : MonoBehaviour
            
             GameObject.Find("/脚本加载").GetComponent<StartGameArrow>().PlaySoundhit(useBlock.getHittingBool());
             GameObject.Find("/脚本加载").GetComponent<StartGameArrow>().choiceOrFalse(useBlock.getThisIsNoWord(), useBlock.getHittingBool());
-            GameObject.Find("/脚本加载").GetComponent<StartGameArrow>().havehit++;
+            //GameObject.Find("/脚本加载").GetComponent<StartGameArrow>().havehit++;
             GameObject.Find("/脚本加载").GetComponent<StartGameArrow>().realTime = 3.8f;
             string useString = transform.name.Substring(0, transform.name.Length - 1);
             Destroy(GameObject.Find(useString + "1"), 0.01f);//delete after 0.01
@@ -94,7 +94,7 @@ public class BlockMoveArrow : MonoBehaviour
         {
             GameObject.Find("/脚本加载").GetComponent<StartGameArrow>().PlaySoundhit(false);
             GameObject.Find("/脚本加载").GetComponent<StartGameArrow>().choiceOrFalse(useBlock.getThisIsNoWord(), false);
-            GameObject.Find("/脚本加载").GetComponent<StartGameArrow>().havehit++;
+            //GameObject.Find("/脚本加载").GetComponent<StartGameArrow>().havehit++;
             GameObject.Find("/脚本加载").GetComponent<StartGameArrow>().realTime = 3.8f;
             String useString = transform.name.Substring(0, transform.name.Length - 1);
 

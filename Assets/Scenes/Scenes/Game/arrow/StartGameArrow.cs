@@ -11,28 +11,28 @@ public class StartGameArrow : MonoBehaviour
 {
     private const int TOTAL_RUNE_COUNT = 24;
 
-    private databaseword useAllWord;// Rune database
-    public int gameModel; //1:Rune-English, 2:English-Rune, 3:See English → Type Rune, 4:Hear Rune → Hit Rune (Archery Mode)
-    private List<block> allTrueWordUsingSHOW;// Correct rune blocks
-    private List<block> falseBlock1;// Distractor block 1
-    private List<block> falseBlock2;// Distractor block 2
-    private List<block> falseBlock3;// Distractor block 3
+    private databaseword useAllWord;
+    public int gameMode;
+    private List<block> allTrueWordUsingSHOW;
+    private List<block> falseBlock1;
+    private List<block> falseBlock2;
+    private List<block> falseBlock3;
     public string[] allToneSingle;
-    public int nowListNumbr = 0;// Current rune index
-    private float paruseTime = 3f;// Default pause time (3s)
+    public int nowListNumber = 0;
+    private float paruseTime = 3f;
     public float nextCreateTime = 0f;
     public float realTime = 0f;
-    public GameObject Newblock;// Block prefab
-    public GameObject toraw;// Block parent container
-    public List<int> allErrorShow;// Incorrect rune indices
-    public int createNumber = 0;// Block creation counter
-    public List<word> ralUseWord;// 24 rune data list
-    public int linkNumber = 0;// Combo count
-    public bool goend = false;// Game end flag
-    public AudioClip[] allsoundTone;// Rune pronunciation audio clips
-    public float finalEndTime;// Game timer (60s total)
-    public AudioClip[] truesound;// Correct/Incorrect feedback sounds
-    public int havehit = 0;// Total hit blocks
+    public GameObject Newblock;
+    public GameObject toraw;
+    public List<int> allErrorShow;
+    public int createNumber = 0;
+    public List<word> ralUseWord;
+    public int linkNumber = 0;
+    public bool goend = false;
+    public AudioClip[] allsoundTone;
+    public float finalEndTime;
+    public AudioClip[] truesound;
+    public int havehit = 0;
     public bool isFirst = true;
 
     private string[] runeSymbols = {
@@ -41,49 +41,114 @@ public class StartGameArrow : MonoBehaviour
         "ᛏ", "ᛒ", "ᛖ", "ᛗ", "ᛚ", "ᛜ", "ᛞ", "ᛟ"
     };
 
-    // Initialization
+    private List<int> correctRuneIds = new List<int>();
+
+    private AudioSource runeAudioSource;
+    private AudioSource feedbackAudioSource;
+
+    private Dictionary<int, bool> roundCounted = new Dictionary<int, bool>();
+
     void Start()
     {
         goend = true;
         firstPlay();
+        InitAudioSources();
+
+        roundCounted = new Dictionary<int, bool>();
+
+        int allsoundToneLength = allsoundTone != null ? allsoundTone.Length : 0;
+        if (allsoundTone == null || allsoundTone.Length != TOTAL_RUNE_COUNT)
+        {
+            Debug.LogError($"Rune pronunciation array length error: Current {allsoundToneLength}, Need 24");
+        }
+        if (truesound == null || truesound.Length < 2)
+        {
+            Debug.LogError($"Feedback sound array not configured: Need at least 2 audios (correct/error), Current {truesound?.Length ?? 0}");
+        }
+        else
+        {
+            Debug.Log($"Feedback sound array configured correctly: Correct sound={truesound[0]?.name ?? "Null"}, Error sound={truesound[1]?.name ?? "Null"}");
+        }
     }
 
-    // Frame Update
+    private void InitAudioSources()
+    {
+        GameObject floorObj = GameObject.Find("/地板");
+        if (floorObj == null)
+        {
+            Debug.LogError("Floor object not found! Check if object name is /地板");
+            return;
+        }
+
+        AudioSource[] audioSources = floorObj.GetComponents<AudioSource>();
+        Debug.Log($"Found {audioSources.Length} AudioSource components on Floor object");
+
+        if (audioSources.Length >= 1)
+        {
+            runeAudioSource = audioSources[0];
+            runeAudioSource.playOnAwake = false;
+            Debug.Log("Rune pronunciation audio source initialized");
+        }
+        else
+        {
+            Debug.LogError("Floor object needs at least 1 AudioSource component!");
+        }
+
+        if (audioSources.Length >= 2)
+        {
+            feedbackAudioSource = audioSources[1];
+            feedbackAudioSource.playOnAwake = false;
+            Debug.Log("Feedback sound audio source initialized (using existing component)");
+        }
+        else
+        {
+            feedbackAudioSource = floorObj.AddComponent<AudioSource>();
+            feedbackAudioSource.playOnAwake = false;
+            Debug.Log("Feedback sound audio source initialized (created new component)");
+        }
+    }
+
     void Update()
     {
-        
         setTrueSHow();
 
-        // Toggle start button visibility
+        GameObject startBtn = GameObject.Find("/开始游戏方块");
         if (!goend)
         {
-            GameObject.Find("/开始游戏方块").GetComponent<MeshRenderer>().enabled = false;
-            GameObject.Find("/开始游戏方块/显示").GetComponent<TextMeshPro>().text = "";
+            if (startBtn != null)
+            {
+                startBtn.GetComponent<MeshRenderer>().enabled = false;
+                Transform displayTransform = startBtn.transform.Find("显示");
+                if (displayTransform != null)
+                {
+                    TextMeshPro displayText = displayTransform.GetComponent<TextMeshPro>();
+                    if (displayText != null) displayText.text = "";
+                }
+            }
             showTime();
         }
         else
         {
-            GameObject.Find("/开始游戏方块").GetComponent<MeshRenderer>().enabled = true;
-            GameObject.Find("/开始游戏方块/显示").GetComponent<TextMeshPro>().text = "Start Game";
-        }
-
-        // Game timer logic
-        if (realTime < 5f)
-        {
-            if (!isFirst)
+            if (startBtn != null)
             {
-                realTime += Time.deltaTime;
-                finalEndTime += Time.deltaTime;
+                startBtn.GetComponent<MeshRenderer>().enabled = true;
+                Transform displayTransform = startBtn.transform.Find("显示");
+                if (displayTransform != null)
+                {
+                    TextMeshPro displayText = displayTransform.GetComponent<TextMeshPro>();
+                    if (displayText != null) displayText.text = "Start Game";
+                }
             }
         }
 
-        // Game end after 60s
-        if (finalEndTime >= 60)
+        if (realTime < 5f && !isFirst)
         {
-            goend = true;
+            realTime += Time.deltaTime;
+            finalEndTime += Time.deltaTime;
         }
 
-        // Spawn blocks (4s interval)
+        if (finalEndTime >= 60) goend = true;
+
         if (!goend && realTime >= 4f)
         {
             addNewNeed();
@@ -91,21 +156,18 @@ public class StartGameArrow : MonoBehaviour
             realTime = 0f;
         }
 
-        // Show end screen after 5s of game end
         if (goend && realTime >= 5f)
         {
             realTime = 5f;
             showEnd();
         }
 
-        // Update combo/error UI
         showLinkAndError();
     }
 
-    // Spawn all blocks (1 correct + 3 distractors)
     public void createBlockS()
     {
-        if (nowListNumbr < allTrueWordUsingSHOW.Count)
+        if (nowListNumber < allTrueWordUsingSHOW.Count)
         {
             while (createNumber != 4)
             {
@@ -117,78 +179,105 @@ public class StartGameArrow : MonoBehaviour
             {
                 createNumber = 0;
 
-                int runeIndex = nowListNumbr % TOTAL_RUNE_COUNT;
-                if (runeIndex >= 0 && runeIndex < allsoundTone.Length)
+                if (!roundCounted.ContainsKey(nowListNumber))
                 {
-                    playsound(runeIndex);
+                    roundCounted.Add(nowListNumber, false);
+                    Debug.Log($"Initialized count flag for round {nowListNumber}: Not counted");
                 }
-                nowListNumbr++;
+
+                if (nowListNumber >= 0 && nowListNumber < correctRuneIds.Count)
+                {
+                    int runeId = correctRuneIds[nowListNumber];
+                    playsound(runeId);
+                }
+
+                nowListNumber++;
             }
         }
     }
 
-    // Spawn single block by index (0=correct, 1-3=distractors)
     public void createBlockBYINT(int a)
     {
         GameObject go = Instantiate(Newblock, toraw.transform);
 
         if (a == 0)
         {
-            go.name = "方块_" + this.nowListNumbr + "_1";
-            go.GetComponent<BlockMoveArrow>().setAll(allTrueWordUsingSHOW[this.nowListNumbr]);
+            go.name = "方块_" + this.nowListNumber + "_1";
+            go.GetComponent<BlockMoveArrow>().setAll(allTrueWordUsingSHOW[this.nowListNumber]);
         }
         else if (a == 1)
         {
-            go.name = "方块_" + this.nowListNumbr + "_2";
-            go.GetComponent<BlockMoveArrow>().setAll(falseBlock1[this.nowListNumbr]);
+            go.name = "方块_" + this.nowListNumber + "_2";
+            go.GetComponent<BlockMoveArrow>().setAll(falseBlock1[this.nowListNumber]);
         }
         else if (a == 2)
         {
-            go.name = "方块_" + this.nowListNumbr + "_3";
-            go.GetComponent<BlockMoveArrow>().setAll(falseBlock2[this.nowListNumbr]);
+            go.name = "方块_" + this.nowListNumber + "_3";
+            go.GetComponent<BlockMoveArrow>().setAll(falseBlock2[this.nowListNumber]);
         }
         else if (a == 3)
         {
-            go.name = "方块_" + this.nowListNumbr + "_4";
-            go.GetComponent<BlockMoveArrow>().setAll(falseBlock3[this.nowListNumbr]);
+            go.name = "方块_" + this.nowListNumber + "_4";
+            go.GetComponent<BlockMoveArrow>().setAll(falseBlock3[this.nowListNumber]);
         }
 
-        // Enable block rendering and movement
         go.GetComponent<MeshRenderer>().enabled = true;
         go.GetComponent<BlockMoveArrow>().enabled = true;
     }
 
-    // Update combo and error statistics UI
     public void showLinkAndError()
     {
-        TextMeshPro comboText = GameObject.Find("/黑色背景测试/得分")?.GetComponent<TextMeshPro>();
-        if (comboText != null)
+        GameObject comboTextObj = GameObject.Find("/黑色背景测试/得分");
+        if (comboTextObj != null)
         {
-            comboText.text = linkNumber + " combo";
+            TextMeshPro comboText = comboTextObj.GetComponent<TextMeshPro>();
+            if (comboText != null) comboText.text = linkNumber + " combo";
         }
 
         if (havehit != 0)
         {
-            TextMeshPro errorText = GameObject.Find("/黑色背景测试/错误次数")?.GetComponent<TextMeshPro>();
-            if (errorText != null)
+            GameObject errorTextObj = GameObject.Find("/黑色背景测试/错误次数");
+            if (errorTextObj != null)
             {
-                int correctCount = havehit - allErrorShow.Count;
-                float accuracy = (float)correctCount / havehit * 100;
-                errorText.text = $"{correctCount} / {havehit}\n{accuracy:F1}%";
+                TextMeshPro errorText = errorTextObj.GetComponent<TextMeshPro>();
+                if (errorText != null)
+                {
+                    int correctCount = havehit - allErrorShow.Count;
+                    float accuracy = (float)correctCount / havehit * 100;
+                    errorText.text = $"{correctCount} / {havehit}\n{accuracy:F1}%";
+                    Debug.Log($"Current stats: Total attempts={havehit}, Correct={correctCount}, Errors={allErrorShow.Count}, Accuracy={accuracy:F1}%");
+                }
             }
         }
     }
 
-    // Process correct/incorrect hit logic
     public void choiceOrFalse(int number, bool Tf)
     {
+        if (roundCounted.ContainsKey(number) && roundCounted[number])
+        {
+            Debug.LogWarning($"Round {number} already counted, skipping duplicate count");
+            return;
+        }
+
+        if (roundCounted.ContainsKey(number))
+            roundCounted[number] = true;
+        else
+            roundCounted.Add(number, true);
+
+        havehit++;
+        Debug.Log($"Counted hit for round {number}: Total attempts={havehit}");
+
         if (Tf)
         {
             linkNumber++;
-            TextMeshPro feedbackText = GameObject.Find("/黑色背景测试/第几个正确")?.GetComponent<TextMeshPro>();
-            if (feedbackText != null)
+            Debug.Log($"Round {number} - Correct, playing correct feedback sound");
+            PlaySoundhit(true);
+
+            GameObject feedbackTextObj = GameObject.Find("/黑色背景测试/第几个正确");
+            if (feedbackTextObj != null)
             {
-                feedbackText.text = $"the{number}is right";
+                TextMeshPro feedbackText = feedbackTextObj.GetComponent<TextMeshPro>();
+                if (feedbackText != null) feedbackText.text = $"the {number} is right";
             }
         }
         else
@@ -197,85 +286,125 @@ public class StartGameArrow : MonoBehaviour
             {
                 allErrorShow.Add(number);
                 linkNumber = 0;
-                TextMeshPro feedbackText = GameObject.Find("/黑色背景测试/第几个正确")?.GetComponent<TextMeshPro>();
-                if (feedbackText != null)
-                {
-                    feedbackText.text = $"the {number}is error";
-                }
+                Debug.Log($"Round {number} - Incorrect, playing error feedback sound");
+                PlaySoundhit(false);
+            }
+
+            GameObject feedbackTextObj = GameObject.Find("/黑色背景测试/第几个正确");
+            if (feedbackTextObj != null)
+            {
+                TextMeshPro feedbackText = feedbackTextObj.GetComponent<TextMeshPro>();
+                if (feedbackText != null) feedbackText.text = $"the {number} is error";
             }
         }
     }
 
-    // Play rune pronunciation audio (Mode 4 only)
     public void playsound(int a)
     {
-        if (gameModel == 4 && a >= 0 && a < allsoundTone.Length)
+        if (gameMode != 4) return;
+        if (a < 0 || a >= TOTAL_RUNE_COUNT)
         {
-            AudioSource audioSource = GameObject.Find("/地板")?.GetComponent<AudioSource>();
-            if (audioSource != null)
+            Debug.LogError($"Invalid rune index: {a}");
+            return;
+        }
+        if (runeAudioSource == null)
+        {
+            Debug.LogError("Rune pronunciation audio source not initialized");
+            return;
+        }
+
+        runeAudioSource.Stop();
+        if (a < allsoundTone.Length && allsoundTone[a] != null)
+        {
+            runeAudioSource.PlayOneShot(allsoundTone[a], 1.5f);
+            Debug.Log($"Playing rune pronunciation: Index {a} → {runeSymbols[a]}");
+        }
+        else
+        {
+            Debug.LogError($"No pronunciation file for rune index {a}");
+        }
+    }
+
+    public void PlaySoundhit(bool isCorrect)
+    {
+        if (feedbackAudioSource == null)
+        {
+            Debug.LogError("Feedback sound audio source not initialized!");
+            return;
+        }
+
+        if (truesound == null)
+        {
+            Debug.LogError("Feedback sound array truesound not assigned!");
+            return;
+        }
+
+        feedbackAudioSource.Stop();
+        feedbackAudioSource.volume = 1f;
+
+        if (isCorrect)
+        {
+            if (truesound.Length > 0 && truesound[0] != null)
             {
-                audioSource.PlayOneShot(allsoundTone[a], 1.5f);
+                feedbackAudioSource.PlayOneShot(truesound[0]);
+                Debug.Log($"Successfully played correct feedback sound: {truesound[0].name}");
+            }
+            else
+            {
+                Debug.LogError("Correct feedback sound truesound[0] not assigned!");
+            }
+        }
+        else
+        {
+            if (truesound.Length > 1 && truesound[1] != null)
+            {
+                feedbackAudioSource.PlayOneShot(truesound[1]);
+                Debug.Log($"Successfully played error feedback sound: {truesound[1].name}");
+            }
+            else
+            {
+                Debug.LogError("Error feedback sound truesound[1] not assigned!");
             }
         }
     }
 
-    // Play background music on first run
     public void firstPlay()
     {
-        AudioSource audioSource = transform.GetComponent<AudioSource>();
-        if (audioSource != null && !audioSource.enabled)
+        AudioSource bgmSource = transform.GetComponent<AudioSource>();
+        if (bgmSource != null && !bgmSource.enabled)
         {
-            audioSource.enabled = true;
-            audioSource.Play();
+            bgmSource.enabled = true;
+            bgmSource.Play();
+            Debug.Log("Playing background music");
         }
     }
 
-    // Play hit feedback sound
-    public void PlaySoundhit(bool isCorrect)
-    {
-        AudioSource audioSource = GameObject.Find("/地板")?.GetComponent<AudioSource>();
-        if (audioSource == null) return;
-
-        if (isCorrect && truesound.Length > 0)
-        {
-            audioSource.PlayOneShot(truesound[0]);
-        }
-        else if (!isCorrect && truesound.Length > 1)
-        {
-            audioSource.PlayOneShot(truesound[1]);
-        }
-    }
-
-    // Show game end screen
     public void showEnd()
     {
-        
         AudioSource bgmSource = transform.GetComponent<AudioSource>();
-        if (bgmSource != null)
-        {
-            bgmSource.enabled = false;
-        }
+        if (bgmSource != null) bgmSource.enabled = false;
 
         string endText = endString();
-        TextMeshPro endTextUI = GameObject.Find("/黑色背景测试/第几个正确")?.GetComponent<TextMeshPro>();
-        if (endTextUI != null)
+        GameObject endTextObj = GameObject.Find("/黑色背景测试/第几个正确");
+        if (endTextObj != null)
         {
-            endTextUI.text = endText;
+            TextMeshPro endTextUI = endTextObj.GetComponent<TextMeshPro>();
+            if (endTextUI != null) endTextUI.text = endText;
         }
+        Debug.Log("[Game Over] Showing result screen");
     }
 
-    // Show remaining game time (60s countdown)
     public void showTime()
     {
         int remainingTime = (int)(60 - finalEndTime);
-        TextMeshPro timeText = GameObject.Find("/黑色背景测试/第几个正确")?.GetComponent<TextMeshPro>();
-        if (timeText != null)
+        GameObject timeTextObj = GameObject.Find("/黑色背景测试/第几个正确");
+        if (timeTextObj != null)
         {
-            timeText.text = $"{remainingTime}s";
+            TextMeshPro timeText = timeTextObj.GetComponent<TextMeshPro>();
+            if (timeText != null) timeText.text = $"{remainingTime}s";
         }
     }
 
-    // Generate end screen text (show incorrect runes)
     public string endString()
     {
         string final = "";
@@ -294,14 +423,10 @@ public class StartGameArrow : MonoBehaviour
                 if (errorIndex >= 0 && errorIndex < allTrueWordUsingSHOW.Count)
                 {
                     final += $"{errorCount}: {allTrueWordUsingSHOW[errorIndex].getShowString()}   ";
-                    if (errorCount % 2 == 0)
-                    {
-                        final += "\n";
-                    }
+                    if (errorCount % 2 == 0) final += "\n";
                 }
             }
 
-            // Add accuracy statistics
             int totalAttempts = havehit;
             int correctAttempts = totalAttempts - allErrorShow.Count;
             float accuracy = totalAttempts > 0 ? (float)correctAttempts / totalAttempts * 100 : 0;
@@ -310,7 +435,6 @@ public class StartGameArrow : MonoBehaviour
         return final;
     }
 
-    // Restart game (reset all state)
     public void restart()
     {
         if (goend)
@@ -319,105 +443,98 @@ public class StartGameArrow : MonoBehaviour
             goend = false;
             allErrorShow.Clear();
             linkNumber = 0;
-            gameModel = 4; // Force archery mode to Rune listening
+            gameMode = 4;
 
-            // Reset block lists
             allTrueWordUsingSHOW = new List<block>();
             falseBlock1 = new List<block>();
             falseBlock2 = new List<block>();
             falseBlock3 = new List<block>();
+            correctRuneIds.Clear();
+            roundCounted.Clear();
 
-            // Reset timers and counters
             finalEndTime = 0;
             realTime = 0f;
-            nowListNumbr = 0;
+            nowListNumber = 0;
             havehit = 0;
             createNumber = 0;
 
-            // Clear UI
-            TextMeshPro errorText = GameObject.Find("/黑色背景测试/错误次数")?.GetComponent<TextMeshPro>();
-            if (errorText != null) errorText.text = "";
+            GameObject errorTextObj = GameObject.Find("/黑色背景测试/错误次数");
+            if (errorTextObj != null)
+            {
+                TextMeshPro errorText = errorTextObj.GetComponent<TextMeshPro>();
+                if (errorText != null) errorText.text = "";
+            }
 
-            TextMeshPro feedbackText = GameObject.Find("/黑色背景测试/第几个正确")?.GetComponent<TextMeshPro>();
-            if (feedbackText != null) feedbackText.text = "";
+            GameObject feedbackTextObj = GameObject.Find("/黑色背景测试/第几个正确");
+            if (feedbackTextObj != null)
+            {
+                TextMeshPro feedbackText = feedbackTextObj.GetComponent<TextMeshPro>();
+                if (feedbackText != null) feedbackText.text = "";
+            }
+
             isFirst = false;
         }
     }
 
-    // Update display text (empty for Mode 4 - no hints)
     public void setTrueSHow()
     {
-        // Mode 4: No hints (listen only)
-        if (gameModel == 4)
+        if (gameMode == 4)
         {
-            TextMeshPro displayText = GameObject.Find("/黑色背景测试/第几个正确")?.GetComponent<TextMeshPro>();
-            if (displayText != null && goend)
+            GameObject displayTextObj = GameObject.Find("/黑色背景测试/第几个正确");
+            if (displayTextObj != null && goend)
             {
-                displayText.text = "";
+                TextMeshPro displayText = displayTextObj.GetComponent<TextMeshPro>();
+                if (displayText != null) displayText.text = "";
             }
             return;
         }
 
-        // Preserve original logic for other modes (unused in archery mode)
         string useAllString = "";
-        for (int i = havehit; i < nowListNumbr; i++)
+        for (int i = havehit; i < nowListNumber; i++)
         {
-            if (gameModel == 1 && i < ralUseWord.Count)
-            {
-                useAllString += ralUseWord[i].getRune() + "\n";
-            }
-            if (gameModel == 2 && i < ralUseWord.Count)
-            {
-                useAllString += ralUseWord[i].getEnglish() + "\n";
-            }
-            if (gameModel == 3 && i < ralUseWord.Count)
-            {
-                useAllString += ralUseWord[i].getRune() + "\n";
-            }
+            if (gameMode == 1 && i < ralUseWord.Count) useAllString += ralUseWord[i].getRune() + "\n";
+            if (gameMode == 2 && i < ralUseWord.Count) useAllString += ralUseWord[i].getEnglish() + "\n";
+            if (gameMode == 3 && i < ralUseWord.Count) useAllString += ralUseWord[i].getRune() + "\n";
         }
 
-        TextMeshPro modeText = GameObject.Find("/黑色背景测试/第几个正确")?.GetComponent<TextMeshPro>();
-        if (modeText != null)
+        GameObject modeTextObj = GameObject.Find("/黑色背景测试/第几个正确");
+        if (modeTextObj != null)
         {
-            modeText.text = useAllString;
+            TextMeshPro modeText = modeTextObj.GetComponent<TextMeshPro>();
+            if (modeText != null) modeText.text = useAllString;
         }
     }
 
-    // Return to main menu
     public void backToMenu()
     {
+        Debug.Log("[Return to Menu] Loading StartMenu scene");
         SceneManager.LoadScene("StartMenu");
     }
 
-    // Core: Generate rune blocks (replace phonetic logic with rune symbols)
     public void addNewNeed()
     {
-        if (gameModel == 4)
+        if (gameMode == 4)
         {
             List<int> usedRuneIndices = new List<int>();
             List<int> usedPositions = new List<int>();
 
-            // Randomly select target rune (0-23)
             int targetRuneIndex = Random.Range(0, TOTAL_RUNE_COUNT);
             usedRuneIndices.Add(targetRuneIndex);
+            correctRuneIds.Add(targetRuneIndex);
 
-            // Random spawn position (0-9)
             int targetPosition = Random.Range(0, 10);
             usedPositions.Add(targetPosition);
 
-            // Create correct block (show rune symbol)
             allTrueWordUsingSHOW.Add(new block(
-                runeSymbols[targetRuneIndex], // Display rune symbol
-                true,                          // Correct answer
-                0,                             // Spawn time (unused in archery mode)
-                targetPosition,                // Spawn position
-                allTrueWordUsingSHOW.Count     // Rune index
+                runeSymbols[targetRuneIndex],
+                true,
+                0,
+                targetPosition,
+                allTrueWordUsingSHOW.Count
             ));
 
-            // Generate 3 distractor blocks (different runes + unique positions)
             while (usedRuneIndices.Count < 4)
             {
-                // Get unique rune index
                 int randomRuneIndex = Random.Range(0, TOTAL_RUNE_COUNT);
                 while (usedRuneIndices.Contains(randomRuneIndex))
                 {
@@ -425,7 +542,6 @@ public class StartGameArrow : MonoBehaviour
                 }
                 usedRuneIndices.Add(randomRuneIndex);
 
-                // Get unique spawn position
                 int randomPosition = Random.Range(0, 10);
                 while (usedPositions.Contains(randomPosition))
                 {
@@ -433,7 +549,6 @@ public class StartGameArrow : MonoBehaviour
                 }
                 usedPositions.Add(randomPosition);
 
-                // Create distractor block
                 string distractorRune = runeSymbols[randomRuneIndex];
                 int blockCount = usedRuneIndices.Count;
 
