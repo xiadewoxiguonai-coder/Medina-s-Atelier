@@ -223,21 +223,23 @@ public class Tower
 [Serializable]
 public class Monster
 {
-    [SerializeField] private int hp;
-    [SerializeField] private int type;
-    [SerializeField] private int race;
-    [SerializeField] private int weakness;
-    [SerializeField] private int toughness;
-    [SerializeField] private List<Item> lootItems = new List<Item>();
-    [SerializeField] private float lootRate;
-    [SerializeField] private int level;
-    [SerializeField] private List<Buff> buffs = new List<Buff>();
+    [SerializeField] public int MaxHp;
+    [SerializeField] public int hp;
+    [SerializeField] public int type;
+    [SerializeField] public int race;
+    [SerializeField] public int weakness;
+    [SerializeField] public int toughness;
+    [SerializeField] public List<Item> lootItems = new List<Item>();
+    [SerializeField] public float lootRate;
+    [SerializeField] public int level;
+    [SerializeField] public List<Buff> buffs = new List<Buff>();
 
     public Monster() { }
 
     public Monster(int hp, int type, int race, int weakness, int toughness, List<Item> lootItems, float lootRate, int level, List<Buff> buffs)
     {
         this.hp = hp;
+        this.MaxHp = hp;
         this.type = type;
         this.race = race;
         this.weakness = weakness;
